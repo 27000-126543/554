@@ -1,4 +1,4 @@
-import { NavLink, useLocation } from 'react-router-dom'
+import { NavLink, useLocation, useNavigate } from 'react-router-dom'
 import { useStore } from '@/store'
 import {
   LayoutDashboard,
@@ -32,8 +32,14 @@ const navItems = [
 ]
 
 export default function Sidebar() {
-  const { sidebarCollapsed, toggleSidebar, user } = useStore()
+  const { sidebarCollapsed, toggleSidebar, user, logout } = useStore()
   const location = useLocation()
+  const navigate = useNavigate()
+
+  const handleLogout = () => {
+    logout()
+    navigate('/login')
+  }
 
   return (
     <aside
@@ -98,6 +104,7 @@ export default function Sidebar() {
           </div>
         )}
         <button
+          onClick={handleLogout}
           className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-slate-400 hover:text-accent-red hover:bg-accent-red/5 transition-all w-full
             ${sidebarCollapsed ? 'justify-center' : ''}`}
           title={sidebarCollapsed ? '退出登录' : undefined}

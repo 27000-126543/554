@@ -1,68 +1,153 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useStore } from '@/store'
-import { Zap, Droplets, Trash2, TrendingUp, TrendingDown, AlertTriangle, Plus, X } from 'lucide-react'
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, Legend } from 'recharts'
+import {
+  Zap,
+  Droplets,
+  Trash2,
+  TrendingUp,
+  TrendingDown,
+  AlertTriangle,
+  Plus,
+  X,
+} from 'lucide-react'
+import {
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+  Cell,
+  Legend,
+} from 'recharts'
 
-interface MetricCard {
-  key: 'energy' | 'water' | 'waste'
-  label: string
-  value: number
-  unit: string
-  icon: React.ReactNode
-  benchmark: number
-  exceeding: boolean
-  trend: number
+type MetricType = 'energy' | 'water' | 'waste'
+
+const metricDefaults: Record<
+  MetricType,
+  { label: string; fallback: number; unit: string; benchmark: number; subcategory: string }
+> = {
+  energy: { label: '能耗', fallback: 45200, unit: 'kWh', benchmark: 42000, subcategory: '电力' },
+  water: { label: '水耗', fallback: 12800, unit: '吨', benchmark: 12000, subcategory: '用水量' },
+  waste: { label: '废弃物', fallback: 3200, unit: '吨', benchmark: 3000, subcategory: '固废' },
+}
+
+const metricColors: Record<MetricType, string> = {
+  energy: '#D4A574',
+  water: '#457B9D',
+  waste: '#E76F51',
+}
+
+const metricIcons: Record<MetricType, React.ReactNode> = {
+  energy: <Zap className="w-6 h-6" />,
+  water: <Droplets className="w-6 h-6" />,
+  waste: <Trash2 className="w-6 h-6" />,
 }
 
 export default function Environment() {
-  const { environmentalData } = useStore()
-  const [showModal, setShowModal] = useState(false)
-  const [dataType, setDataType] = useState<'energy' | 'water' | 'waste'>('energy')
-  const [form, setForm] = useState({ value: '', period: '' })
+  const { user, envMetrics, fetchEnvMetrics, addEnvMetric } = useStore()
 
-  const metrics: MetricCard[] = [
+  const [showModal, setShowModal] = useState(false)
+  const [dataType, setDataType] = useState<MetricType>('energy')
+  const [formValues, setFormValues] = useState({
+    subcategory: '',
+    value: '',
+    unit: '',
+    period: '2026-06',
+    benchmark_value: '',
+  })
+
+  const companyId = 'c1'
+
+  useEffect(() => {
+    fetchEnvMetrics(companyId)
+  }, [fetchEnvMetrics])
+
+  const sumByType = (type: MetricType) => {
+    const metrics = envMetrics.filter((m) => m.type === type)
+    if (metrics.length === 0) return metricDefaults[type].fallback
+    return metrics.reduce((sum, m) => sum + m.value, 0)
+  }
+
+  const energyValue = sumByType('energy')
+  const waterValue = sumByType('water')
+  const wasteValue = sumByType('waste')
+
+  const metricsData = [
     {
-      key: 'energy',
-      label: '能耗',
-      value: environmentalData.energy,
-      unit: 'kWh',
-      icon: <Zap className="w-6 h-6" />,
-      benchmark: environmentalData.energyBenchmark,
-      exceeding: environmentalData.energyExceeding,
-      trend: 3.2,
+      key: 'energy' as MetricType,
+      ...metricDefaults.energy,
+      value: energyValue,
+      exceeding: energyValue > metricDefaults.energy.benchmark,
     },
     {
-      key: 'water',
-      label: '水耗',
-      value: environmentalData.water,
-      unit: '吨',
-      icon: <Droplets className="w-6 h-6" />,
-      benchmark: environmentalData.waterBenchmark,
-      exceeding: environmentalData.waterExceeding,
-      trend: 1.8,
+      key: 'water' as MetricType,
+      ...metricDefaults.water,
+      value: waterValue,
+      exceeding: waterValue > metricDefaults.water.benchmark,
     },
     {
-      key: 'waste',
-      label: '废弃物',
-      value: environmentalData.waste,
-      unit: '吨',
-      icon: <Trash2 className="w-6 h-6" />,
-      benchmark: environmentalData.wasteBenchmark,
-      exceeding: environmentalData.wasteExceeding,
-      trend: 2.5,
+      key: 'waste' as MetricType,
+      ...metricDefaults.waste,
+      value: wasteValue,
+      exceeding: wasteValue > metricDefaults.waste.benchmark,
     },
   ]
 
   const chartData = [
-    { name: '能耗', company: environmentalData.energy, benchmark: environmentalData.energyBenchmark, exceeding: environmentalData.energyExceeding },
-    { name: '水耗', company: environmentalData.water, benchmark: environmentalData.waterBenchmark, exceeding: environmentalData.waterExceeding },
-    { name: '废弃物', company: environmentalData.waste, benchmark: environmentalData.wasteBenchmark, exceeding: environmentalData.wasteExceeding },
+    {
+      name: '能耗',
+      company: energyValue,
+      benchmark: metricDefaults.energy.benchmark,
+      unit: 'kWh',
+      exceeding: energyValue > metricDefaults.energy.benchmark,
+    },
+    {
+      name: '水耗',
+      company: waterValue,
+      benchmark: metricDefaults.water.benchmark,
+      unit: '吨',
+      exceeding: waterValue > metricDefaults.water.benchmark,
+    },
+    {
+      name: '废弃物',
+      company: wasteValue,
+      benchmark: metricDefaults.waste.benchmark,
+      unit: '吨',
+      exceeding: wasteValue > metricDefaults.waste.benchmark,
+    },
   ]
 
-  const metricColor: Record<string, string> = {
-    energy: '#D4A574',
-    water: '#457B9D',
-    waste: '#E76F51',
+  const openModal = (type: MetricType) => {
+    setDataType(type)
+    setFormValues({
+      subcategory: metricDefaults[type].subcategory,
+      value: '',
+      unit: metricDefaults[type].unit,
+      period: '2026-06',
+      benchmark_value: String(metricDefaults[type].benchmark),
+    })
+    setShowModal(true)
+  }
+
+  const handleSubmit = async () => {
+    if (!formValues.value) return
+
+    try {
+      await addEnvMetric({
+        companyId,
+        type: dataType,
+        subcategory: formValues.subcategory,
+        value: Number(formValues.value),
+        unit: formValues.unit,
+        period: formValues.period,
+        benchmark_value: Number(formValues.benchmark_value) || null,
+      })
+      setShowModal(false)
+    } catch (e) {
+      console.error(e)
+    }
   }
 
   return (
@@ -80,20 +165,27 @@ export default function Environment() {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        {metrics.map((metric) => {
-          const diff = ((metric.value - metric.benchmark) / metric.benchmark * 100).toFixed(1)
+        {metricsData.map((metric) => {
+          const diff = ((metric.value - metric.benchmark) / metric.benchmark) * 100
+          const diffStr = diff.toFixed(1)
           return (
-            <div key={metric.key} className="glass-card-hover p-5 relative overflow-hidden group">
+            <div
+              key={metric.key}
+              className="glass-card-hover p-5 relative overflow-hidden group"
+            >
               <div
                 className="absolute top-0 right-0 w-24 h-24 rounded-bl-full opacity-10 transition-opacity group-hover:opacity-20"
-                style={{ backgroundColor: metricColor[metric.key] }}
+                style={{ backgroundColor: metricColors[metric.key] }}
               />
               <div className="flex items-start justify-between mb-4">
                 <div
                   className="w-12 h-12 rounded-xl flex items-center justify-center"
-                  style={{ backgroundColor: `${metricColor[metric.key]}20`, color: metricColor[metric.key] }}
+                  style={{
+                    backgroundColor: `${metricColors[metric.key]}20`,
+                    color: metricColors[metric.key],
+                  }}
                 >
-                  {metric.icon}
+                  {metricIcons[metric.key]}
                 </div>
                 {metric.exceeding ? (
                   <div className="flex items-center gap-1 text-accent-red">
@@ -111,20 +203,23 @@ export default function Environment() {
               <div className="text-xs text-slate-500 mb-3">{metric.label}</div>
               <div className="flex items-center justify-between pt-3 border-t border-white/5">
                 <div className="flex items-center gap-1.5">
-                  {metric.trend > 0 ? (
-                    <TrendingUp className="w-3.5 h-3.5 text-accent-red" />
+                  {metric.exceeding ? (
+                    <>
+                      <TrendingUp className="w-3.5 h-3.5 text-accent-red" />
+                      <span className="text-xs font-medium text-accent-red">+{diffStr}%</span>
+                    </>
                   ) : (
-                    <TrendingDown className="w-3.5 h-3.5 text-accent-mint" />
+                    <>
+                      <TrendingDown className="w-3.5 h-3.5 text-accent-mint" />
+                      <span className="text-xs font-medium text-accent-mint">{diffStr}%</span>
+                    </>
                   )}
-                  <span className={`text-xs font-medium ${metric.trend > 0 ? 'text-accent-red' : 'text-accent-mint'}`}>
-                    {metric.trend > 0 ? '+' : ''}{metric.trend}%
-                  </span>
                 </div>
                 <div className="text-xs text-slate-400">
-                  行业基准 <span className="font-mono text-slate-300">{metric.benchmark.toLocaleString()}</span>
-                  {metric.exceeding && (
-                    <span className="text-accent-red ml-1">+{diff}%</span>
-                  )}
+                  行业基准{' '}
+                  <span className="font-mono text-slate-300">
+                    {metric.benchmark.toLocaleString()}
+                  </span>
                 </div>
               </div>
             </div>
@@ -137,7 +232,11 @@ export default function Environment() {
         <div className="h-80">
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={chartData} barGap={8} barCategoryGap="25%">
-              <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" vertical={false} />
+              <CartesianGrid
+                strokeDasharray="3 3"
+                stroke="rgba(255,255,255,0.05)"
+                vertical={false}
+              />
               <XAxis
                 dataKey="name"
                 axisLine={false}
@@ -148,7 +247,7 @@ export default function Environment() {
                 axisLine={false}
                 tickLine={false}
                 tick={{ fill: '#64748b', fontSize: 12 }}
-                tickFormatter={(v: number) => v >= 1000 ? `${(v / 1000).toFixed(0)}k` : String(v)}
+                tickFormatter={(v: number) => (v >= 1000 ? `${(v / 1000).toFixed(0)}k` : String(v))}
               />
               <Tooltip
                 contentStyle={{
@@ -159,7 +258,10 @@ export default function Environment() {
                   color: '#e2e8f0',
                 }}
                 labelStyle={{ color: '#e2e8f0', fontWeight: 600, marginBottom: 4 }}
-                formatter={(value: number, name: string) => [value.toLocaleString(), name === 'company' ? '公司值' : '行业基准']}
+                formatter={(value: number, name: string) => [
+                  value.toLocaleString(),
+                  name === 'company' ? '公司值' : '行业基准',
+                ]}
               />
               <Legend
                 formatter={(value: string) => (value === 'company' ? '公司值' : '行业基准')}
@@ -174,7 +276,13 @@ export default function Environment() {
                   />
                 ))}
               </Bar>
-              <Bar dataKey="benchmark" fill="#2D6A4F" fillOpacity={0.4} radius={[6, 6, 0, 0]} maxBarSize={40} />
+              <Bar
+                dataKey="benchmark"
+                fill="#2D6A4F"
+                fillOpacity={0.4}
+                radius={[6, 6, 0, 0]}
+                maxBarSize={40}
+              />
             </BarChart>
           </ResponsiveContainer>
         </div>
@@ -199,25 +307,28 @@ export default function Environment() {
           <h3 className="section-title text-lg">数据录入</h3>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-          {metrics.map((metric) => (
+          {metricsData.map((metric) => (
             <button
               key={metric.key}
               className="glass-card-hover p-4 flex items-center gap-3 text-left"
-              onClick={() => {
-                setDataType(metric.key)
-                setForm({ value: '', period: '' })
-                setShowModal(true)
-              }}
+              onClick={() => openModal(metric.key)}
             >
               <div
                 className="w-10 h-10 rounded-lg flex items-center justify-center shrink-0"
-                style={{ backgroundColor: `${metricColor[metric.key]}20`, color: metricColor[metric.key] }}
+                style={{
+                  backgroundColor: `${metricColors[metric.key]}20`,
+                  color: metricColors[metric.key],
+                }}
               >
                 <Plus className="w-5 h-5" />
               </div>
               <div>
-                <div className="text-sm text-white font-medium">录入{metric.label}数据</div>
-                <div className="text-xs text-slate-500 mt-0.5">当前 {metric.value.toLocaleString()} {metric.unit}</div>
+                <div className="text-sm text-white font-medium">
+                  录入{metric.label}数据
+                </div>
+                <div className="text-xs text-slate-500 mt-0.5">
+                  当前 {metric.value.toLocaleString()} {metric.unit}
+                </div>
               </div>
             </button>
           ))}
@@ -229,35 +340,76 @@ export default function Environment() {
           <div className="glass-card w-full max-w-md p-6 animate-slide-up">
             <div className="flex items-center justify-between mb-6">
               <h3 className="section-title text-lg">
-                录入{metrics.find((m) => m.key === dataType)?.label}数据
+                录入{metricDefaults[dataType].label}数据
               </h3>
-              <button onClick={() => setShowModal(false)} className="text-slate-400 hover:text-white transition-colors">
+              <button
+                onClick={() => setShowModal(false)}
+                className="text-slate-400 hover:text-white transition-colors"
+              >
                 <X className="w-5 h-5" />
               </button>
             </div>
             <div className="space-y-4">
               <div>
+                <label className="block text-sm text-slate-400 mb-1.5">子类别</label>
+                <input
+                  className="input-field"
+                  placeholder="请输入子类别"
+                  value={formValues.subcategory}
+                  onChange={(e) =>
+                    setFormValues({ ...formValues, subcategory: e.target.value })
+                  }
+                />
+              </div>
+              <div>
                 <label className="block text-sm text-slate-400 mb-1.5">数值</label>
                 <input
                   className="input-field"
                   type="number"
-                  placeholder={`请输入${metrics.find((m) => m.key === dataType)?.label}数值`}
-                  value={form.value}
-                  onChange={(e) => setForm({ ...form, value: e.target.value })}
+                  placeholder={`请输入${metricDefaults[dataType].label}数值`}
+                  value={formValues.value}
+                  onChange={(e) => setFormValues({ ...formValues, value: e.target.value })}
+                />
+              </div>
+              <div>
+                <label className="block text-sm text-slate-400 mb-1.5">单位</label>
+                <input
+                  className="input-field bg-white/[0.02] text-slate-400"
+                  value={formValues.unit}
+                  readOnly
                 />
               </div>
               <div>
                 <label className="block text-sm text-slate-400 mb-1.5">统计周期</label>
                 <input
                   className="input-field"
-                  placeholder="如：2026-Q2"
-                  value={form.period}
-                  onChange={(e) => setForm({ ...form, period: e.target.value })}
+                  placeholder="如：2026-06"
+                  value={formValues.period}
+                  onChange={(e) => setFormValues({ ...formValues, period: e.target.value })}
+                />
+              </div>
+              <div>
+                <label className="block text-sm text-slate-400 mb-1.5">基准值</label>
+                <input
+                  className="input-field"
+                  type="number"
+                  placeholder="请输入基准值"
+                  value={formValues.benchmark_value}
+                  onChange={(e) =>
+                    setFormValues({ ...formValues, benchmark_value: e.target.value })
+                  }
                 />
               </div>
               <div className="flex gap-3 pt-2">
-                <button className="btn-secondary flex-1" onClick={() => setShowModal(false)}>取消</button>
-                <button className="btn-primary flex-1" onClick={() => setShowModal(false)}>确认录入</button>
+                <button
+                  className="btn-secondary flex-1"
+                  onClick={() => setShowModal(false)}
+                >
+                  取消
+                </button>
+                <button className="btn-primary flex-1" onClick={handleSubmit}>
+                  确认录入
+                </button>
               </div>
             </div>
           </div>

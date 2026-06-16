@@ -1,51 +1,60 @@
 import { create } from 'zustand'
+import type { User } from './types'
 
-interface User {
-  id: string
-  companyName: string
-  email: string
-  role: 'enterprise' | 'esg_lead' | 'cfo' | 'ceo' | 'auditor' | 'admin'
-  membershipLevel: 'bronze' | 'silver' | 'gold' | 'diamond'
-  industry: string
-  region: string
-}
-
-interface ESGScore {
+export interface ESGScore {
   total: number
   environmental: number
   social: number
   governance: number
 }
 
-interface CarbonData {
-  scope1: number
-  scope2: number
-  scope3: number
-  total: number
-  trend: Array<{ month: string; scope1: number; scope2: number; scope3: number }>
-}
-
-interface EnvironmentalData {
-  energy: number
-  water: number
-  waste: number
-  energyBenchmark: number
-  waterBenchmark: number
-  wasteBenchmark: number
-  energyExceeding: boolean
-  waterExceeding: boolean
-  wasteExceeding: boolean
-}
-
-interface Report {
+export interface CarbonEmission {
   id: string
+  company_id: string
+  scope: 1 | 2 | 3
+  category: string
+  value: number
+  unit: string
+  period: string
+  source: 'manual' | 'device'
+  created_at: string
+}
+
+export interface EnvironmentalMetric {
+  id: string
+  company_id: string
+  type: 'energy' | 'water' | 'waste'
+  subcategory: string
+  value: number
+  unit: string
+  period: string
+  benchmark_value: number | null
+  is_exceeding: number
+  created_at: string
+}
+
+export interface Report {
+  id: string
+  company_id: string
   template: 'GRI' | 'TCFD' | 'custom'
   status: 'draft' | 'pending_esg' | 'pending_cfo' | 'pending_ceo' | 'published' | 'rejected'
   period: string
-  createdAt: string
+  data: string | null
+  created_at: string
+  published_at: string | null
 }
 
-interface TodoItem {
+export interface ApprovalLog {
+  id: string
+  report_id: string
+  approver_id: string
+  role: string
+  action: 'approve' | 'reject'
+  comment: string | null
+  created_at: string
+}
+
+export interface TodoItem {
   id: string
   title: string
   type: 'fill' | 'approve' | 'alert'
@@ -53,7 +62,7 @@ interface TodoItem {
   priority: 'high' | 'medium' | 'low'
 }
 
-interface AlertItem {
+export interface AlertItem {
   id: string
   title: string
   description: string
@@ -61,7 +70,7 @@ interface AlertItem {
   timestamp: string
 }
 
-interface ReductionPlan {
+export interface ReductionPlan {
   id: string
   name: string
   expectedReduction: number
@@ -70,7 +79,7 @@ interface ReductionPlan {
   description: string
 }
 
-interface CompanyScore {
+export interface CompanyScore {
   companyId: string
   companyName: string
   industry: string
@@ -82,55 +91,86 @@ interface CompanyScore {
   membershipLevel: string
 }
 
-interface AuditFinding {
+export interface AuditFinding {
   id: string
   module: string
   status: 'compliant' | 'non_compliant'
   comment: string
 }
 
-interface AppState {
+export interface AuditSession {
+  id: string
+  company_id: string
+  auditor_id: string
+  status: 'in_progress' | 'completed'
+  opinion: string | null
+  findings: string | null
+  start_date: string
+  end_date: string | null
+}
+
+const BASE_URL = '/api'
+
+async function apiCall<T>(path: string, options?: RequestInit): Promise<T> {
+  const res = await fetch(BASE_URL + path, {
+    headers: { 'Content-Type': 'application/json', ...(options?.headers || {}) },
+    ...options,
+  })
+  const json = await res.json()
+  if (!json.success) throw new Error(json.error || '请求失败')
+  return json.data as T
+}
+
+export interface AppState {
   user: User | null
   isAuthenticated: boolean
   sidebarCollapsed: boolean
   esgScore: ESGScore
-  carbonData: CarbonData
-  environmentalData: EnvironmentalData
+  carbonData: {
+    scope1: number
+    scope2: number
+    scope3: number
+    total: number
+    trend: Array<{ month: string; scope1: number; scope2: number; scope3: number }>
+  }
+  carbonEmissions: CarbonEmission[]
+  envMetrics: EnvironmentalMetric[]
   reports: Report[]
+  approvalLogs: ApprovalLog[]
   todos: TodoItem[]
   alerts: AlertItem[]
   reductionPlans: ReductionPlan[]
   companyScores: CompanyScore[]
   auditFindings: AuditFinding[]
+  auditSession: AuditSession | null
   reportingRate: number
   dataCompleteness: number
 
   login: (user: User) => void
   logout: () => void
   toggleSidebar: () => void
-  setEsgScore: (score: ESGScore) => void
-  setCarbonData: (data: CarbonData) => void
-  setEnvironmentalData: (data: EnvironmentalData) => void
-  setReports: (reports: Report[]) => void
-  setTodos: (todos: TodoItem[]) => void
-  setAlerts: (alerts: AlertItem[]) => void
-  setCompanyScores: (scores: CompanyScore[]) => void
+
+  fetchCarbonEmissions: (companyId: string) => Promise<void>
+  addCarbonEmission: (payload: Omit<CarbonEmission, 'id' | 'company_id' | 'created_at'> & { companyId: string }) => Promise<void>
+  updateCarbonEmission: (id: string, payload: Partial<CarbonEmission>) => Promise<void>
+  deleteCarbonEmission: (id: string) => Promise<void>
+  recalcCarbonTotals: () => void
+
+  fetchEnvMetrics: (companyId: string) => Promise<void>
+  addEnvMetric: (payload: Omit<EnvironmentalMetric, 'id' | 'company_id' | 'created_at' | 'is_exceeding'> & { companyId: string }) => Promise<void>
+
+  fetchReports: (companyId: string) => Promise<void>
+  createReport: (payload: { companyId: string; template: Report['template']; period: string }) => Promise<void>
+  approveReport: (payload: { reportId: string; approverId: string; role: string; action: 'approve' | 'reject'; comment?: string }) => Promise<void>
+  fetchApprovalLogs: (reportId: string) => Promise<void>
+
+  fetchAuditSession: (companyId: string) => Promise<void>
+  submitAuditOpinion: (sessionId: string, opinion: string, findings: AuditFinding[]) => Promise<void>
+
+  addAlert: (alert: Omit<AlertItem, 'id' | 'timestamp'>) => void
 }
 
-export type {
-  User,
-  ESGScore,
-  CarbonData,
-  EnvironmentalData,
-  Report,
-  TodoItem,
-  AlertItem,
-  ReductionPlan,
-  CompanyScore,
-  AuditFinding,
-}
-
-export const useStore = create<AppState>((set) => ({
+export const useStore = create<AppState>((set, get) => ({
   user: null,
   isAuthenticated: false,
   sidebarCollapsed: false,
@@ -155,22 +195,14 @@ export const useStore = create<AppState>((set) => ({
       { month: '2026-06', scope1: 1250, scope2: 890, scope3: 2100 },
     ],
   },
-  environmentalData: {
-    energy: 45200,
-    water: 12800,
-    waste: 3200,
-    energyBenchmark: 42000,
-    waterBenchmark: 12000,
-    wasteBenchmark: 3000,
-    energyExceeding: true,
-    waterExceeding: true,
-    wasteExceeding: true,
-  },
+  carbonEmissions: [],
+  envMetrics: [],
   reports: [
-    { id: 'rpt-001', template: 'GRI', status: 'published', period: '2025-Q4', createdAt: '2026-01-15' },
-    { id: 'rpt-002', template: 'TCFD', status: 'pending_ceo', period: '2026-Q1', createdAt: '2026-04-20' },
-    { id: 'rpt-003', template: 'GRI', status: 'draft', period: '2026-Q2', createdAt: '2026-06-10' },
+    { id: 'rpt-001', company_id: 'c1', template: 'GRI', status: 'published', period: '2025-Q4', data: null, created_at: '2026-01-15', published_at: '2026-01-20' },
+    { id: 'rpt-002', company_id: 'c1', template: 'TCFD', status: 'pending_ceo', period: '2026-Q1', data: null, created_at: '2026-04-20', published_at: null },
+    { id: 'rpt-003', company_id: 'c1', template: 'GRI', status: 'draft', period: '2026-Q2', data: null, created_at: '2026-06-10', published_at: null },
   ],
+  approvalLogs: [],
   todos: [
     { id: 't1', title: '完成Q2碳排放数据录入', type: 'fill', deadline: '2026-06-30', priority: 'high' },
     { id: 't2', title: '审核Q1 ESG报告', type: 'approve', deadline: '2026-06-20', priority: 'high' },
@@ -202,17 +234,290 @@ export const useStore = create<AppState>((set) => ({
     { id: 'af3', module: '社会指标', status: 'compliant', comment: '员工安全数据记录完整' },
     { id: 'af4', module: '治理指标', status: 'compliant', comment: '董事会结构信息完整' },
   ],
+  auditSession: null,
   reportingRate: 76,
   dataCompleteness: 82,
 
   login: (user) => set({ user, isAuthenticated: true }),
   logout: () => set({ user: null, isAuthenticated: false }),
   toggleSidebar: () => set((state) => ({ sidebarCollapsed: !state.sidebarCollapsed })),
-  setEsgScore: (score) => set({ esgScore: score }),
-  setCarbonData: (data) => set({ carbonData: data }),
-  setEnvironmentalData: (data) => set({ environmentalData: data }),
-  setReports: (reports) => set({ reports }),
-  setTodos: (todos) => set({ todos }),
-  setAlerts: (alerts) => set({ alerts }),
-  setCompanyScores: (scores) => set({ companyScores: scores }),
+
+  recalcCarbonTotals: () => {
+    const { carbonEmissions } = get()
+    let s1 = 0, s2 = 0, s3 = 0
+    for (const e of carbonEmissions) {
+      if (e.scope === 1) s1 += e.value
+      else if (e.scope === 2) s2 += e.value
+      else if (e.scope === 3) s3 += e.value
+    }
+    set((state) => ({
+      carbonData: {
+        ...state.carbonData,
+        scope1: s1,
+        scope2: s2,
+        scope3: s3,
+        total: s1 + s2 + s3,
+      },
+    }))
+  },
+
+  fetchCarbonEmissions: async (companyId) => {
+    try {
+      const data = await apiCall<CarbonEmission[]>(`/carbon/${companyId}`)
+      set({ carbonEmissions: data })
+      get().recalcCarbonTotals()
+    } catch (e) {
+      console.warn('fetch carbon failed, using mock data', e)
+    }
+  },
+
+  addCarbonEmission: async (payload) => {
+    try {
+      const data = await apiCall<CarbonEmission>('/carbon', {
+        method: 'POST',
+        body: JSON.stringify({
+          companyId: payload.companyId,
+          scope: payload.scope,
+          category: payload.category,
+          value: payload.value,
+          unit: payload.unit,
+          period: payload.period,
+          source: payload.source,
+        }),
+      })
+      const newEmission: CarbonEmission = {
+        ...data,
+        company_id: payload.companyId,
+        scope: payload.scope,
+        category: payload.category,
+        value: payload.value,
+        unit: payload.unit,
+        period: payload.period,
+        source: payload.source,
+        created_at: new Date().toISOString(),
+      }
+      set((state) => ({ carbonEmissions: [...state.carbonEmissions, newEmission] }))
+      get().recalcCarbonTotals()
+    } catch (e) {
+      console.error(e)
+      throw e
+    }
+  },
+
+  updateCarbonEmission: async (id, payload) => {
+    try {
+      await apiCall(`/carbon/${id}`, {
+        method: 'PUT',
+        body: JSON.stringify(payload),
+      })
+      set((state) => ({
+        carbonEmissions: state.carbonEmissions.map((e) =>
+          e.id === id ? { ...e, ...payload } : e
+        ),
+      }))
+      get().recalcCarbonTotals()
+    } catch (e) {
+      console.error(e)
+      throw e
+    }
+  },
+
+  deleteCarbonEmission: async (id) => {
+    try {
+      await apiCall(`/carbon/${id}`, { method: 'DELETE' })
+      set((state) => ({
+        carbonEmissions: state.carbonEmissions.filter((e) => e.id !== id),
+      }))
+      get().recalcCarbonTotals()
+    } catch (e) {
+      console.error(e)
+      throw e
+    }
+  },
+
+  fetchEnvMetrics: async (companyId) => {
+    try {
+      const data = await apiCall<EnvironmentalMetric[]>(`/environment/${companyId}`)
+      set({ envMetrics: data })
+    } catch (e) {
+      console.warn('fetch env metrics failed', e)
+    }
+  },
+
+  addEnvMetric: async (payload) => {
+    try {
+      const isExceeding = payload.benchmark_value ? payload.value > payload.benchmark_value : false
+      await apiCall('/environment', {
+        method: 'POST',
+        body: JSON.stringify({
+          companyId: payload.companyId,
+          type: payload.type,
+          subcategory: payload.subcategory,
+          value: payload.value,
+          unit: payload.unit,
+          period: payload.period,
+          benchmarkValue: payload.benchmark_value,
+        }),
+      })
+      const newMetric: EnvironmentalMetric = {
+        id: Math.random().toString(36).slice(2, 10),
+        company_id: payload.companyId,
+        type: payload.type,
+        subcategory: payload.subcategory,
+        value: payload.value,
+        unit: payload.unit,
+        period: payload.period,
+        benchmark_value: payload.benchmark_value ?? null,
+        is_exceeding: isExceeding ? 1 : 0,
+        created_at: new Date().toISOString(),
+      }
+      set((state) => ({
+        envMetrics: [
+          ...state.envMetrics.filter((m) => !(m.type === payload.type && m.period === payload.period)),
+          newMetric,
+        ],
+      }))
+      if (isExceeding) {
+        const typeName = payload.type === 'energy' ? '能耗' : payload.type === 'water' ? '水耗' : '废弃物'
+        const unitName = payload.unit
+        const pct = payload.benchmark_value
+          ? (((payload.value - payload.benchmark_value) / payload.benchmark_value) * 100).toFixed(1)
+          : '0'
+        get().addAlert({
+          title: `${typeName}超标预警`,
+          description: `${typeName}${payload.value}${unitName}，超出行业基准${pct}%`,
+          severity: 'critical',
+        })
+      }
+    } catch (e) {
+      console.error(e)
+      throw e
+    }
+  },
+
+  fetchReports: async (companyId) => {
+    try {
+      const data = await apiCall<Report[]>(`/report/${companyId}`)
+      set({ reports: data })
+    } catch (e) {
+      console.warn('fetch reports failed', e)
+    }
+  },
+
+  createReport: async (payload) => {
+    try {
+      const data = await apiCall<{ id: string; status: Report['status'] }>('/report', {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      })
+      const newReport: Report = {
+        id: data.id,
+        company_id: payload.companyId,
+        template: payload.template,
+        status: 'draft',
+        period: payload.period,
+        data: null,
+        created_at: new Date().toISOString().slice(0, 10),
+        published_at: null,
+      }
+      set((state) => ({ reports: [newReport, ...state.reports] }))
+    } catch (e) {
+      console.error(e)
+      throw e
+    }
+  },
+
+  approveReport: async (payload) => {
+    try {
+      const data = await apiCall<{ id: string; status: Report['status'] }>(`/report/${payload.reportId}/approve`, {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      })
+      set((state) => ({
+        reports: state.reports.map((r) =>
+          r.id === payload.reportId
+            ? { ...r, status: data.status, published_at: data.status === 'published' ? new Date().toISOString().slice(0, 10) : r.published_at }
+            : r
+        ),
+      }))
+      if (payload.comment) {
+        set((state) => ({
+          approvalLogs: [
+            ...state.approvalLogs,
+            {
+              id: Math.random().toString(36).slice(2, 10),
+              report_id: payload.reportId,
+              approver_id: payload.approverId,
+              role: payload.role,
+              action: payload.action,
+              comment: payload.comment,
+              created_at: new Date().toISOString(),
+            },
+          ],
+        }))
+      }
+    } catch (e) {
+      console.error(e)
+      throw e
+    }
+  },
+
+  fetchApprovalLogs: async (reportId) => {
+    try {
+      const data = await apiCall<ApprovalLog[]>(`/report/${reportId}/approvals`)
+      set({ approvalLogs: data })
+    } catch (e) {
+      console.warn(e)
+    }
+  },
+
+  fetchAuditSession: async (companyId) => {
+    try {
+      const data = await apiCall<AuditSession[]>(`/audit/company/${companyId}`)
+      if (data.length > 0) {
+        const latest = data.sort((a, b) => (b.start_date || '').localeCompare(a.start_date || ''))[0]
+        set({ auditSession: latest })
+        if (latest.findings) {
+          try {
+            set({ auditFindings: JSON.parse(latest.findings) })
+          } catch {}
+        }
+      }
+    } catch (e) {
+      console.warn('fetch audit session failed', e)
+    }
+  },
+
+  submitAuditOpinion: async (sessionId, opinion, findings) => {
+    try {
+      await apiCall(`/audit/${sessionId}/opinion`, {
+        method: 'POST',
+        body: JSON.stringify({ opinion, findings }),
+      })
+      set((state) => ({
+        auditSession: state.auditSession
+          ? {
+              ...state.auditSession,
+              status: 'completed',
+              opinion,
+              findings: JSON.stringify(findings),
+              end_date: new Date().toISOString(),
+            }
+          : state.auditSession,
+        auditFindings: findings,
+      }))
+    } catch (e) {
+      console.error(e)
+      throw e
+    }
+  },
+
+  addAlert: (alert) => {
+    const newAlert: AlertItem = {
+      ...alert,
+      id: Math.random().toString(36).slice(2, 10),
+      timestamp: new Date().toISOString().slice(0, 10),
+    }
+    set((state) => ({ alerts: [newAlert, ...state.alerts] }))
+  },
 }))

@@ -40,9 +40,49 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
     )
 
     scheduleSave(db)
-    res.status(201).json({ success: true, data: { id, companyId, scope, category, value, unit, period, source } })
+    res.status(201).json({
+      success: true,
+      data: {
+        id,
+        company_id: companyId,
+        scope,
+        category,
+        value,
+        unit: unit || 'tCO₂e',
+        period,
+        source: source || 'manual',
+      }
+    })
   } catch (error) {
     res.status(500).json({ success: false, error: '录入碳排放数据失败' })
+  }
+})
+
+router.put('/:id', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { id } = req.params
+    const { category, value, unit, period, source } = req.body
+    const db = await getDb()
+
+    const fields: string[] = []
+    const params: unknown[] = []
+    if (category !== undefined) { fields.push('category = ?'); params.push(category) }
+    if (value !== undefined) { fields.push('value = ?'); params.push(value) }
+    if (unit !== undefined) { fields.push('unit = ?'); params.push(unit) }
+    if (period !== undefined) { fields.push('period = ?'); params.push(period) }
+    if (source !== undefined) { fields.push('source = ?'); params.push(source) }
+
+    if (fields.length === 0) {
+      res.status(400).json({ success: false, error: '没有需要更新的字段' })
+      return
+    }
+
+    params.push(id)
+    db.run(`UPDATE carbon_emission SET ${fields.join(', ')} WHERE id = ?`, params)
+    scheduleSave(db)
+    res.json({ success: true, message: '更新成功' })
+  } catch (error) {
+    res.status(500).json({ success: false, error: '更新碳排放数据失败' })
   }
 })
 
