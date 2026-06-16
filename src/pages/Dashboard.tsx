@@ -1,4 +1,5 @@
 import { useStore } from '@/store'
+import { useEffect } from 'react'
 import { cn } from '@/lib/utils'
 import {
   AreaChart,
@@ -356,7 +357,11 @@ function AlertList() {
 }
 
 export default function Dashboard() {
-  const { reportingRate, dataCompleteness } = useStore()
+  const { user, reportingRate, dataCompleteness, fetchAlerts } = useStore()
+
+  useEffect(() => {
+    fetchAlerts(user?.companyId || 'c1')
+  }, [user?.companyId, fetchAlerts])
 
   return (
     <div className="space-y-6 animate-fade-in">

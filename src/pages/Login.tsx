@@ -18,6 +18,7 @@ export default function Login() {
     await new Promise((r) => setTimeout(r, 800))
     login({
       id: 'usr-001',
+      companyId: 'c1',
       companyName: '绿源科技',
       email: email || 'admin@esgpro.com',
       role: 'enterprise',

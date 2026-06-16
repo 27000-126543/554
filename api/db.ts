@@ -149,6 +149,17 @@ function initializeSchema(db: Database) {
       end_date TEXT
     )
   `)
+
+  db.run(`
+    CREATE TABLE IF NOT EXISTS alert (
+      id TEXT PRIMARY KEY,
+      company_id TEXT NOT NULL,
+      title TEXT NOT NULL,
+      description TEXT NOT NULL,
+      severity TEXT NOT NULL,
+      timestamp TEXT DEFAULT (datetime('now'))
+    )
+  `)
 }
 
 function seedData(db: Database) {

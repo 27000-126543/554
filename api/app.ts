@@ -15,6 +15,7 @@ import governanceRoutes from './routes/governance.js'
 import reportRoutes from './routes/report.js'
 import auditRoutes from './routes/audit.js'
 import adminRoutes from './routes/admin.js'
+import alertRoutes from './routes/alert.js'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -35,6 +36,7 @@ app.use('/api/governance', governanceRoutes)
 app.use('/api/report', reportRoutes)
 app.use('/api/audit', auditRoutes)
 app.use('/api/admin', adminRoutes)
+app.use('/api/alert', alertRoutes)
 
 app.use(
   '/api/health',

@@ -94,7 +94,7 @@ export default function Report() {
     fetchApprovalLogs,
   } = useStore()
 
-  const companyId = user?.id || 'c1'
+  const companyId = user?.companyId || 'c1'
   const [selectedTemplate, setSelectedTemplate] = useState<'GRI' | 'TCFD' | 'custom'>('GRI')
   const [selectedPeriod, setSelectedPeriod] = useState('2026-Q2')
   const [generating, setGenerating] = useState(false)
@@ -422,10 +422,20 @@ export default function Report() {
                             </button>
                             <button
                               onClick={() => handleOpenApproval(r)}
-                              className="text-accent-gold hover:text-accent-gold/80 transition-colors flex items-center gap-1 text-xs"
+                              className={`transition-colors flex items-center gap-1 text-xs ${
+                                r.status === 'draft'
+                                  ? 'text-accent-gold hover:text-accent-gold/80'
+                                  : r.status.startsWith('pending')
+                                  ? 'text-accent-gold hover:text-accent-gold/80'
+                                  : 'text-slate-500 hover:text-slate-400'
+                              }`}
                             >
                               <CheckCircle2 className="w-3.5 h-3.5" />
-                              审批/查看审批
+                              {r.status === 'draft'
+                                ? '发起审批'
+                                : r.status.startsWith('pending')
+                                ? '审批'
+                                : '查看审批'}
                             </button>
                           </div>
                         </td>
@@ -595,11 +605,14 @@ export default function Report() {
                 </div>
               )}
 
-              {(selectedReport.status === 'pending_esg' ||
+              {(selectedReport.status === 'draft' ||
+                selectedReport.status === 'pending_esg' ||
                 selectedReport.status === 'pending_cfo' ||
                 selectedReport.status === 'pending_ceo') && (
                 <div className="glass-card p-5">
-                  <h4 className="text-slate-300 font-medium text-sm mb-4">审批操作</h4>
+                  <h4 className="text-slate-300 font-medium text-sm mb-4">
+                    {selectedReport.status === 'draft' ? '发起审批' : '审批操作'}
+                  </h4>
                   <div className="space-y-4">
                     <div>
                       <label className="text-slate-400 text-xs mb-2 block">审批意见</label>
@@ -607,7 +620,9 @@ export default function Report() {
                         value={approvalComment}
                         onChange={(e) => setApprovalComment(e.target.value)}
                         placeholder={
-                          selectedReport.status.startsWith('pending')
+                          selectedReport.status === 'draft'
+                            ? '请输入发起审批说明（可选）...'
+                            : selectedReport.status.startsWith('pending')
                             ? '请输入审批意见（驳回时必填）...'
                             : '请输入审批意见...'
                         }
@@ -616,18 +631,20 @@ export default function Report() {
                       />
                     </div>
                     <div className="flex items-center gap-3 justify-end">
-                      <button
-                        onClick={() => handleApprove('reject')}
-                        disabled={submittingApproval}
-                        className="btn-danger flex items-center gap-2"
-                      >
-                        {submittingApproval ? (
-                          <Loader2 className="w-4 h-4 animate-spin" />
-                        ) : (
-                          <AlertTriangle className="w-4 h-4" />
-                        )}
-                        驳回
-                      </button>
+                      {selectedReport.status !== 'draft' && (
+                        <button
+                          onClick={() => handleApprove('reject')}
+                          disabled={submittingApproval}
+                          className="btn-danger flex items-center gap-2"
+                        >
+                          {submittingApproval ? (
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                          ) : (
+                            <AlertTriangle className="w-4 h-4" />
+                          )}
+                          驳回
+                        </button>
+                      )}
                       <button
                         onClick={() => handleApprove('approve')}
                         disabled={submittingApproval}
@@ -635,10 +652,12 @@ export default function Report() {
                       >
                         {submittingApproval ? (
                           <Loader2 className="w-4 h-4 animate-spin" />
+                        ) : selectedReport.status === 'draft' ? (
+                          <Send className="w-4 h-4" />
                         ) : (
                           <Send className="w-4 h-4" />
                         )}
-                        通过
+                        {selectedReport.status === 'draft' ? '发起审批' : '通过'}
                       </button>
                     </div>
                   </div>

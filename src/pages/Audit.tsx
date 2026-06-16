@@ -88,7 +88,7 @@ export default function Audit() {
     submitAuditOpinion,
   } = useStore()
 
-  const companyId = user?.id || 'c1'
+  const companyId = user?.companyId || 'c1'
   const [activeModule, setActiveModule] = useState<ModuleKey>('碳排放')
   const [localFindings, setLocalFindings] = useState<AuditFinding[]>([])
   const [opinion, setOpinion] = useState('')
@@ -147,7 +147,10 @@ export default function Audit() {
         setLocalSession({ id: sessionId })
       }
 
-      await submitAuditOpinion(sessionId, opinion.trim(), localFindings)
+      await submitAuditOpinion(effectiveSession?.id || null, opinion.trim(), localFindings, {
+        companyId,
+        auditorId: user?.id || 'u4',
+      })
       showNotification('审计意见提交成功')
     } catch (e) {
       showNotification('提交失败，请重试', 'error')

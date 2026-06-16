@@ -47,16 +47,28 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
 
 router.post('/:id/opinion', async (req: Request, res: Response): Promise<void> => {
   try {
-    const { opinion, findings } = req.body
+    const { id } = req.params
+    const { opinion, findings, companyId, auditorId } = req.body
     const db = await getDb()
+
+    const existing = db.exec("SELECT id FROM audit_session WHERE id = ?", [id])
+    let sessionId = id
+
+    if (!existing[0]?.values?.length) {
+      sessionId = uuidv4()
+      db.run(
+        "INSERT INTO audit_session (id, company_id, auditor_id, status, start_date) VALUES (?, ?, ?, 'in_progress', datetime('now'))",
+        [sessionId, companyId || 'c1', auditorId || 'u4']
+      )
+    }
 
     db.run(
       "UPDATE audit_session SET opinion = ?, findings = ?, status = 'completed', end_date = datetime('now') WHERE id = ?",
-      [opinion, JSON.stringify(findings), req.params.id]
+      [opinion, JSON.stringify(findings), sessionId]
     )
 
     scheduleSave(db)
-    res.json({ success: true, message: '审计意见已提交' })
+    res.json({ success: true, data: { id: sessionId } })
   } catch (error) {
     res.status(500).json({ success: false, error: '提交审计意见失败' })
   }

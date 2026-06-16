@@ -121,6 +121,12 @@ async function apiCall<T>(path: string, options?: RequestInit): Promise<T> {
   return json.data as T
 }
 
+const DEFAULT_COMPANY_ID = 'c1'
+
+export function getEffectiveCompanyId(user: User | null): string {
+  return user?.companyId || DEFAULT_COMPANY_ID
+}
+
 export interface AppState {
   user: User | null
   isAuthenticated: boolean
@@ -151,13 +157,13 @@ export interface AppState {
   toggleSidebar: () => void
 
   fetchCarbonEmissions: (companyId: string) => Promise<void>
-  addCarbonEmission: (payload: Omit<CarbonEmission, 'id' | 'company_id' | 'created_at'> & { companyId: string }) => Promise<void>
+  addCarbonEmission: (payload: { companyId: string; scope: 1 | 2 | 3; category: string; value: number; unit: string; period: string; source: 'manual' | 'device' }) => Promise<void>
   updateCarbonEmission: (id: string, payload: Partial<CarbonEmission>) => Promise<void>
   deleteCarbonEmission: (id: string) => Promise<void>
   recalcCarbonTotals: () => void
 
   fetchEnvMetrics: (companyId: string) => Promise<void>
-  addEnvMetric: (payload: Omit<EnvironmentalMetric, 'id' | 'company_id' | 'created_at' | 'is_exceeding'> & { companyId: string }) => Promise<void>
+  addEnvMetric: (payload: { companyId: string; type: EnvironmentalMetric['type']; subcategory: string; value: number; unit: string; period: string; benchmark_value: number | null }) => Promise<void>
 
   fetchReports: (companyId: string) => Promise<void>
   createReport: (payload: { companyId: string; template: Report['template']; period: string }) => Promise<void>
@@ -165,9 +171,10 @@ export interface AppState {
   fetchApprovalLogs: (reportId: string) => Promise<void>
 
   fetchAuditSession: (companyId: string) => Promise<void>
-  submitAuditOpinion: (sessionId: string, opinion: string, findings: AuditFinding[]) => Promise<void>
+  submitAuditOpinion: (sessionId: string | null, opinion: string, findings: AuditFinding[], extras?: { companyId?: string; auditorId?: string }) => Promise<void>
 
-  addAlert: (alert: Omit<AlertItem, 'id' | 'timestamp'>) => void
+  fetchAlerts: (companyId: string) => Promise<void>
+  addAlert: (payload: { companyId: string; title: string; description: string; severity: AlertItem['severity'] }) => Promise<void>
 }
 
 export const useStore = create<AppState>((set, get) => ({
@@ -197,11 +204,7 @@ export const useStore = create<AppState>((set, get) => ({
   },
   carbonEmissions: [],
   envMetrics: [],
-  reports: [
-    { id: 'rpt-001', company_id: 'c1', template: 'GRI', status: 'published', period: '2025-Q4', data: null, created_at: '2026-01-15', published_at: '2026-01-20' },
-    { id: 'rpt-002', company_id: 'c1', template: 'TCFD', status: 'pending_ceo', period: '2026-Q1', data: null, created_at: '2026-04-20', published_at: null },
-    { id: 'rpt-003', company_id: 'c1', template: 'GRI', status: 'draft', period: '2026-Q2', data: null, created_at: '2026-06-10', published_at: null },
-  ],
+  reports: [],
   approvalLogs: [],
   todos: [
     { id: 't1', title: '完成Q2碳排放数据录入', type: 'fill', deadline: '2026-06-30', priority: 'high' },
@@ -209,11 +212,7 @@ export const useStore = create<AppState>((set, get) => ({
     { id: 't3', title: '更新水耗基准值', type: 'fill', deadline: '2026-07-01', priority: 'medium' },
     { id: 't4', title: '提交董事会多元化数据', type: 'fill', deadline: '2026-07-05', priority: 'low' },
   ],
-  alerts: [
-    { id: 'a1', title: '能耗超标预警', description: '本月能耗45,200kWh，超出行业基准7.6%', severity: 'critical', timestamp: '2026-06-15' },
-    { id: 'a2', title: '水耗接近上限', description: '水耗12,800吨，超出基准6.7%', severity: 'warning', timestamp: '2026-06-14' },
-    { id: 'a3', title: 'Q1报告审批到期', description: 'TCFD报告待CEO审批，距截止日5天', severity: 'warning', timestamp: '2026-06-15' },
-  ],
+  alerts: [],
   reductionPlans: [
     { id: 'rp1', name: '清洁能源替代方案', expectedReduction: 15, difficulty: 'medium', rating: 4.5, description: '将30%电力切换至可再生能源，预计减少碳排放630吨CO₂e' },
     { id: 'rp2', name: '供应链绿色优化', expectedReduction: 12, difficulty: 'high', rating: 4, description: '优选低碳供应商，缩短物流链路，预计减少碳排放508吨CO₂e' },
@@ -250,6 +249,7 @@ export const useStore = create<AppState>((set, get) => ({
       else if (e.scope === 2) s2 += e.value
       else if (e.scope === 3) s3 += e.value
     }
+    if (carbonEmissions.length === 0) return
     set((state) => ({
       carbonData: {
         ...state.carbonData,
@@ -267,13 +267,13 @@ export const useStore = create<AppState>((set, get) => ({
       set({ carbonEmissions: data })
       get().recalcCarbonTotals()
     } catch (e) {
-      console.warn('fetch carbon failed, using mock data', e)
+      console.warn('fetch carbon failed', e)
     }
   },
 
   addCarbonEmission: async (payload) => {
     try {
-      const data = await apiCall<CarbonEmission>('/carbon', {
+      const data = await apiCall<{ id: string }>('/carbon', {
         method: 'POST',
         body: JSON.stringify({
           companyId: payload.companyId,
@@ -286,7 +286,7 @@ export const useStore = create<AppState>((set, get) => ({
         }),
       })
       const newEmission: CarbonEmission = {
-        ...data,
+        id: data.id,
         company_id: payload.companyId,
         scope: payload.scope,
         category: payload.category,
@@ -379,13 +379,13 @@ export const useStore = create<AppState>((set, get) => ({
       }))
       if (isExceeding) {
         const typeName = payload.type === 'energy' ? '能耗' : payload.type === 'water' ? '水耗' : '废弃物'
-        const unitName = payload.unit
         const pct = payload.benchmark_value
           ? (((payload.value - payload.benchmark_value) / payload.benchmark_value) * 100).toFixed(1)
           : '0'
-        get().addAlert({
+        await get().addAlert({
+          companyId: payload.companyId,
           title: `${typeName}超标预警`,
-          description: `${typeName}${payload.value}${unitName}，超出行业基准${pct}%`,
+          description: `${typeName}${payload.value}${payload.unit}，超出行业基准${pct}%`,
           severity: 'critical',
         })
       }
@@ -440,22 +440,16 @@ export const useStore = create<AppState>((set, get) => ({
             : r
         ),
       }))
-      if (payload.comment) {
-        set((state) => ({
-          approvalLogs: [
-            ...state.approvalLogs,
-            {
-              id: Math.random().toString(36).slice(2, 10),
-              report_id: payload.reportId,
-              approver_id: payload.approverId,
-              role: payload.role,
-              action: payload.action,
-              comment: payload.comment,
-              created_at: new Date().toISOString(),
-            },
-          ],
-        }))
+      const newLog: ApprovalLog = {
+        id: Math.random().toString(36).slice(2, 10),
+        report_id: payload.reportId,
+        approver_id: payload.approverId,
+        role: payload.role,
+        action: payload.action,
+        comment: payload.comment || null,
+        created_at: new Date().toISOString(),
       }
+      set((state) => ({ approvalLogs: [...state.approvalLogs, newLog] }))
     } catch (e) {
       console.error(e)
       throw e
@@ -465,7 +459,12 @@ export const useStore = create<AppState>((set, get) => ({
   fetchApprovalLogs: async (reportId) => {
     try {
       const data = await apiCall<ApprovalLog[]>(`/report/${reportId}/approvals`)
-      set({ approvalLogs: data })
+      set((state) => ({
+        approvalLogs: [
+          ...state.approvalLogs.filter((l) => l.report_id !== reportId),
+          ...data,
+        ],
+      }))
     } catch (e) {
       console.warn(e)
     }
@@ -482,28 +481,36 @@ export const useStore = create<AppState>((set, get) => ({
             set({ auditFindings: JSON.parse(latest.findings) })
           } catch {}
         }
+      } else {
+        set({ auditSession: null })
       }
     } catch (e) {
       console.warn('fetch audit session failed', e)
     }
   },
 
-  submitAuditOpinion: async (sessionId, opinion, findings) => {
+  submitAuditOpinion: async (sessionId, opinion, findings, extras) => {
     try {
-      await apiCall(`/audit/${sessionId}/opinion`, {
+      const data = await apiCall<{ id: string }>(`/audit/${sessionId || 'stub'}/opinion`, {
         method: 'POST',
-        body: JSON.stringify({ opinion, findings }),
+        body: JSON.stringify({
+          opinion,
+          findings,
+          companyId: extras?.companyId || DEFAULT_COMPANY_ID,
+          auditorId: extras?.auditorId || 'u4',
+        }),
       })
       set((state) => ({
-        auditSession: state.auditSession
-          ? {
-              ...state.auditSession,
-              status: 'completed',
-              opinion,
-              findings: JSON.stringify(findings),
-              end_date: new Date().toISOString(),
-            }
-          : state.auditSession,
+        auditSession: {
+          id: data.id,
+          company_id: extras?.companyId || state.auditSession?.company_id || DEFAULT_COMPANY_ID,
+          auditor_id: extras?.auditorId || state.auditSession?.auditor_id || 'u4',
+          status: 'completed',
+          opinion,
+          findings: JSON.stringify(findings),
+          start_date: state.auditSession?.start_date || new Date().toISOString(),
+          end_date: new Date().toISOString(),
+        },
         auditFindings: findings,
       }))
     } catch (e) {
@@ -512,10 +519,36 @@ export const useStore = create<AppState>((set, get) => ({
     }
   },
 
-  addAlert: (alert) => {
+  fetchAlerts: async (companyId) => {
+    try {
+      const data = await apiCall<AlertItem[]>(`/alert/${companyId}`)
+      if (data.length > 0) {
+        set({ alerts: data })
+      }
+    } catch (e) {
+      console.warn('fetch alerts failed', e)
+    }
+  },
+
+  addAlert: async (payload) => {
+    try {
+      await apiCall('/alert', {
+        method: 'POST',
+        body: JSON.stringify({
+          companyId: payload.companyId,
+          title: payload.title,
+          description: payload.description,
+          severity: payload.severity,
+        }),
+      })
+    } catch (e) {
+      console.warn('persist alert failed, using in-memory only', e)
+    }
     const newAlert: AlertItem = {
-      ...alert,
       id: Math.random().toString(36).slice(2, 10),
+      title: payload.title,
+      description: payload.description,
+      severity: payload.severity,
       timestamp: new Date().toISOString().slice(0, 10),
     }
     set((state) => ({ alerts: [newAlert, ...state.alerts] }))
